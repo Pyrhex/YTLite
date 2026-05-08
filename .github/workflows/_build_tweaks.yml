@@ -62,7 +62,7 @@ jobs:
         if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
-          echo "THEOS=${{ github.workspace }}/theos" >> $GITHUB_ENV
+          echo "THEOS=${{ runner.temp }}/theos" >> $GITHUB_ENV
 
       - name: Cache Theos
         if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
@@ -71,22 +71,23 @@ jobs:
         env:
           cache-name: theos_cache_9bc7340
         with:
-          path: theos/
+          path: ${{ runner.temp }}/theos
           key: ${{ env.cache-name }}
           restore-keys: ${{ env.cache-name }}
 
       - name: Setup Theos
         if: ${{ (inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
-        uses: actions/checkout@v6
-        with:
-          repository: theos/theos
-          ref: 9bc73406cf80b711ef4d02c15ff1dedc4478a275
-          path: theos
-          submodules: recursive
+        run: |
+          rm -rf "$THEOS"
+          git clone --quiet https://github.com/theos/theos.git "$THEOS"
+          cd "$THEOS"
+          git checkout --quiet 9bc73406cf80b711ef4d02c15ff1dedc4478a275
+          git submodule update --init --recursive
 
       - name: Download iOS SDK
         if: ${{ (inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
         run: |
+          mkdir -p "$THEOS/sdks"
           git clone --quiet -n --depth=1 --filter=tree:0 https://github.com/theos/sdks/
           cd sdks
           git sparse-checkout set --no-cone iPhoneOS16.5.sdk
@@ -118,6 +119,7 @@ jobs:
       - name: Clone YouTubeHeader
         if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
+          mkdir -p "$THEOS/include"
           if [ -d "$THEOS/include/YouTubeHeader" ]; then
             cd $THEOS/include/YouTubeHeader && git pull
           else
@@ -143,6 +145,7 @@ jobs:
       - name: Clone PSHeader
         if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
+          mkdir -p "$THEOS/include"
           if [ -d "$THEOS/include/PSHeader" ]; then
             cd $THEOS/include/PSHeader && git pull
           else
