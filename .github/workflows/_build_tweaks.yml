@@ -3,6 +3,11 @@ name: Build Tweaks (Helper)
 on:
   workflow_call:
     inputs:
+      build_local_tweak:
+        type: boolean
+        required: false
+        default: false
+
       enable_youpip:
         type: boolean
         required: true
@@ -50,15 +55,17 @@ jobs:
 
     steps:
       - name: Install Dependencies
+        if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: brew install make ldid dpkg
 
       - name: Set PATH environment variable
+        if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
           echo "$(brew --prefix make)/libexec/gnubin" >> $GITHUB_PATH
           echo "THEOS=${{ github.workspace }}/theos" >> $GITHUB_ENV
 
       - name: Cache Theos
-        if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
+        if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         id: theos
         uses: actions/cache@v5
         env:
@@ -69,7 +76,7 @@ jobs:
           restore-keys: ${{ env.cache-name }}
 
       - name: Setup Theos
-        if: ${{ (inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
+        if: ${{ (inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
         uses: actions/checkout@v6
         with:
           repository: theos/theos
@@ -78,13 +85,19 @@ jobs:
           submodules: recursive
 
       - name: Download iOS SDK
-        if: ${{ (inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
+        if: ${{ (inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc) && steps.theos.outputs.cache-hit != 'true' }}
         run: |
           git clone --quiet -n --depth=1 --filter=tree:0 https://github.com/theos/sdks/
           cd sdks
           git sparse-checkout set --no-cone iPhoneOS16.5.sdk
           git checkout
           mv *.sdk $THEOS/sdks
+
+      - name: Checkout current repository
+        if: ${{ inputs.build_local_tweak }}
+        uses: actions/checkout@v6
+        with:
+          clean: false
 
       - name: Download YouTube Plus (by version)
         if: ${{ inputs.tweak_version != '' }}
@@ -103,7 +116,7 @@ jobs:
           fi
 
       - name: Clone YouTubeHeader
-        if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
+        if: ${{ inputs.build_local_tweak || inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
         run: |
           if [ -d "$THEOS/include/YouTubeHeader" ]; then
             cd $THEOS/include/YouTubeHeader && git pull
@@ -114,6 +127,18 @@ jobs:
             rm -rf "$THEOS/include/YTHeaders"
             cp -r "$THEOS/include/YouTubeHeader" "$THEOS/include/YTHeaders"
           fi
+          if [ "${{ inputs.build_local_tweak }}" = "true" ]; then
+            ln -sfn "$THEOS/include/YouTubeHeader" "$GITHUB_WORKSPACE/../YouTubeHeader"
+          fi
+
+      - name: Fetch protobuf headers for local tweak build
+        if: ${{ inputs.build_local_tweak }}
+        run: |
+          git clone --quiet -n --depth=1 --filter=tree:0 https://github.com/jkhsjdhjs/youtube-native-share.git native-share-src
+          cd native-share-src
+          git sparse-checkout set --no-cone protobuf
+          git checkout
+          ln -sfn "$GITHUB_WORKSPACE/native-share-src/protobuf" "$GITHUB_WORKSPACE/../protobuf"
 
       - name: Clone PSHeader
         if: ${{ inputs.enable_youpip || inputs.enable_ytuhd || inputs.enable_yq || inputs.enable_ryd || inputs.enable_ytabc || inputs.enable_demc }}
@@ -155,6 +180,12 @@ jobs:
       - name: Clone DontEatMyContent
         if: ${{ inputs.enable_demc }}
         run: git clone --quiet --depth=1 https://github.com/therealFoxster/DontEatMyContent.git
+
+      - name: Build local YouTube Plus tweak
+        if: ${{ inputs.build_local_tweak }}
+        run: |
+          make clean package DEBUG=0 FINALPACKAGE=1
+          mv packages/*.deb ytplus.deb
 
       - name: Build YouPiP
         if: ${{ inputs.enable_youpip }}
